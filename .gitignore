@@ -5,3 +5,5 @@ output/*
 experiments/*
 logs/*
 *.pth.tar
+*.jpg
+outputLP/*
