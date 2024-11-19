@@ -8,7 +8,7 @@ from torchvision import transforms
 from torchvision.utils import save_image
 
 import net
-from function import adaptive_instance_normalization, coral
+from function import adaptive_instance_normalization, coral, CBAM
 
 
 def test_transform(size, crop):
@@ -22,21 +22,28 @@ def test_transform(size, crop):
     return transform
 
 
-def style_transfer(vgg, decoder, content, style, alpha=1.0,
+def style_transfer(vgg_1, vgg_2, vgg_3, decoder, content, style, alpha=1.0,
                    interpolation_weights=None):
     assert (0.0 <= alpha <= 1.0)
-    content_f = vgg(content)
-    style_f = vgg(style)
-    if interpolation_weights:
-        _, C, H, W = content_f.size()
-        feat = torch.FloatTensor(1, C, H, W).zero_().to(device)
-        base_feat = adaptive_instance_normalization(content_f, style_f)
-        for i, w in enumerate(interpolation_weights):
-            feat = feat + w * base_feat[i:i + 1]
-        content_f = content_f[0:1]
-    else:
-        feat = adaptive_instance_normalization(content_f, style_f)
-    feat = feat * alpha + content_f * (1 - alpha)
+    vggs = [vgg_1, vgg_2, vgg_3]
+    feat = content.clone()
+    content_f = content
+    style_f = style
+    for i in range(3):
+        feat = vggs[i](feat)
+        content_f = vggs[i](content_f)
+        style_f = vggs[i](style_f)
+        if interpolation_weights:
+            _, C, H, W = feat.size()
+            new_feat = torch.FloatTensor(1, C, H, W).zero_().to(device)
+            base_feat = adaptive_instance_normalization(feat, style_f)
+            for i, w in enumerate(interpolation_weights):
+                new_feat = new_feat + w * base_feat[i:i + 1]
+            feat = new_feat
+            content_f = content_f[0:1]
+        else:
+            feat = adaptive_instance_normalization(feat, style_f)
+        feat = feat * alpha + content_f * (1 - alpha)
     return decoder(feat)
 
 
@@ -118,9 +125,12 @@ vgg = net.vgg
 decoder.eval()
 vgg.eval()
 
-decoder.load_state_dict(torch.load(args.decoder))
-vgg.load_state_dict(torch.load(args.vgg))
-vgg = nn.Sequential(*list(vgg.children())[:31])
+decoder.load_state_dict(torch.load(args.decoder, weights_only=True))
+vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
+# vgg = nn.Sequential(*list(vgg.children())[:31]) Encoder is not trained.
+vgg_1 = nn.Sequential(*list(vgg.children())[:4])
+vgg_2 = nn.Sequential(*list(vgg.children())[4:11])
+vgg_3 = nn.Sequential(*list(vgg.children())[11:18])
 
 vgg.to(device)
 decoder.to(device)
@@ -136,7 +146,7 @@ for content_path in content_paths:
         style = style.to(device)
         content = content.to(device)
         with torch.no_grad():
-            output = style_transfer(vgg, decoder, content, style,
+            output = style_transfer(vgg_1, vgg_2, vgg_3, decoder, content, style,
                                     args.alpha, interpolation_weights)
         output = output.cpu()
         output_name = output_dir / '{:s}_interpolation{:s}'.format(
@@ -152,7 +162,7 @@ for content_path in content_paths:
             style = style.to(device).unsqueeze(0)
             content = content.to(device).unsqueeze(0)
             with torch.no_grad():
-                output = style_transfer(vgg, decoder, content, style,
+                output = style_transfer(vgg_1, vgg_2, vgg_3, decoder, content, style,
                                         args.alpha)
             output = output.cpu()
 
