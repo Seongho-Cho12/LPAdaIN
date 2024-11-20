@@ -126,6 +126,14 @@ vgg = net.vgg
 decoder.eval()
 vgg.eval()
 
+match args.depth:
+    case 1:
+        decoder = nn.Sequential(*list(decoder.children())[27:])
+    case 2:
+        decoder = nn.Sequential(*list(decoder.children())[20:])
+    case 3:
+        decoder = nn.Sequential(*list(decoder.children())[13:])
+
 decoder.load_state_dict(torch.load(args.decoder, weights_only=True))
 vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
 vgg_1 = nn.Sequential(*list(vgg.children())[:4])
