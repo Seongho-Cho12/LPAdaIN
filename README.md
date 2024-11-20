@@ -25,17 +25,17 @@ Download decoder.pth / vgg_normalized.pth from [release](https://github.com/naot
 ### Test
 Use `--content` and `--style` to provide the respective path to the content and style image.
 ```
-CUDA_VISIBLE_DEVICES=<gpu_id> python test.py --content input/content/cornell.jpg --style input/style/woman_with_hat_matisse.jpg
+python test.py --content input/content/cornell.jpg --style input/style/woman_with_hat_matisse.jpg
 ```
 
 You can also run the code on directories of content and style images using `--content_dir` and `--style_dir`. It will save every possible combination of content and styles to the output directory.
 ```
-CUDA_VISIBLE_DEVICES=<gpu_id> python test.py --content_dir input/content --style_dir input/style
+python test.py --content_dir input/content --style_dir input/style
 ```
 
 This is an example of mixing four styles by specifying `--style` and `--style_interpolation_weights` option.
 ```
-CUDA_VISIBLE_DEVICES=<gpu_id> python test.py --content input/content/avril.jpg --style input/style/picasso_self_portrait.jpg,input/style/impronte_d_artista.jpg,input/style/trial.jpg,input/style/antimonocromatismo.jpg --style_interpolation_weights 1,1,1,1 --content_size 512 --style_size 512 --crop
+python test.py --content input/content/avril.jpg --style input/style/picasso_self_portrait.jpg,input/style/impronte_d_artista.jpg,input/style/trial.jpg,input/style/antimonocromatismo.jpg --style_interpolation_weights 1,1,1,1 --content_size 512 --style_size 512 --crop
 ```
 
 Some other options:
@@ -48,7 +48,11 @@ Some other options:
 ### Train
 Use `--content_dir` and `--style_dir` to provide the respective directory to the content and style images.
 ```
-CUDA_VISIBLE_DEVICES=<gpu_id> python train.py --content_dir <content_dir> --style_dir <style_dir>
+python train.py --content_dir <content_dir> --style_dir <style_dir>
+```
+You can change the depth of this model by adding `--depth`. You can put one of the number in (1, 2, 3, 4). Default depth is 3.
+```
+python train.py --content_dir <content_dir> --style_dir <style_dir> --depth <number in (1, 2, 3, 4)>
 ```
 
 For more details and parameters, please refer to --help option.

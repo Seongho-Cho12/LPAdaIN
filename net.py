@@ -8,34 +8,34 @@ from function import CBAM
 device = torch.device('cuda')
 
 decoder = nn.Sequential(
-    # nn.ReflectionPad2d((1, 1, 1, 1)),
-    # nn.Conv2d(512, 256, (3, 3)),
-    # nn.ReLU(),
-    # nn.Upsample(scale_factor=2, mode='nearest'),
-    # nn.ReflectionPad2d((1, 1, 1, 1)),
-    # nn.Conv2d(256, 256, (3, 3)),
-    # nn.ReLU(),
-    # nn.ReflectionPad2d((1, 1, 1, 1)),
-    # nn.Conv2d(256, 256, (3, 3)),
-    # nn.ReLU(),
-    # nn.ReflectionPad2d((1, 1, 1, 1)),
-    # nn.Conv2d(256, 256, (3, 3)),
-    # nn.ReLU(),
     nn.ReflectionPad2d((1, 1, 1, 1)),
+    nn.Conv2d(512, 256, (3, 3)),
+    nn.ReLU(),
+    nn.Upsample(scale_factor=2, mode='nearest'),
+    nn.ReflectionPad2d((1, 1, 1, 1)),
+    nn.Conv2d(256, 256, (3, 3)),
+    nn.ReLU(),
+    nn.ReflectionPad2d((1, 1, 1, 1)),
+    nn.Conv2d(256, 256, (3, 3)),
+    nn.ReLU(),
+    nn.ReflectionPad2d((1, 1, 1, 1)),
+    nn.Conv2d(256, 256, (3, 3)),
+    nn.ReLU(),
+    nn.ReflectionPad2d((1, 1, 1, 1)),   # 13th, for 3 layer
     nn.Conv2d(256, 128, (3, 3)),
     nn.ReLU(),
     nn.Upsample(scale_factor=2, mode='nearest'),
     nn.ReflectionPad2d((1, 1, 1, 1)),
     nn.Conv2d(128, 128, (3, 3)),
     nn.ReLU(),
-    nn.ReflectionPad2d((1, 1, 1, 1)),
+    nn.ReflectionPad2d((1, 1, 1, 1)),   # 20th, for 2 layer
     nn.Conv2d(128, 64, (3, 3)),
     nn.ReLU(),
     nn.Upsample(scale_factor=2, mode='nearest'),
     nn.ReflectionPad2d((1, 1, 1, 1)),
     nn.Conv2d(64, 64, (3, 3)),
     nn.ReLU(),
-    nn.ReflectionPad2d((1, 1, 1, 1)),
+    nn.ReflectionPad2d((1, 1, 1, 1)),   # 27th, for 1 layer
     nn.Conv2d(64, 3, (3, 3)),
 )
 
@@ -97,37 +97,41 @@ vgg = nn.Sequential(
 
 
 class Net(nn.Module):
-    def __init__(self, encoder, decoder):
+    def __init__(self, encoder, decoder, depth):
         super(Net, self).__init__()
         enc_layers = list(encoder.children())
         self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
-        self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
-        self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
-        # self.enc_4 = nn.Sequential(*enc_layers[18:31])  # relu3_1 -> relu4_1
+        if depth >= 2:
+            self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
+        if depth >= 3:
+            self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
+        if depth == 4:
+            self.enc_4 = nn.Sequential(*enc_layers[18:31])  # relu3_1 -> relu4_1
         self.decoder = decoder
         self.mse_loss = nn.MSELoss()
 
         # fix the encoder
-        for name in ['enc_1', 'enc_2', 'enc_3']: # , 'enc_4' <- erased
+        names = [f'enc_{i+1}' for i in range(depth)]
+        for name in names:
             for param in getattr(self, name).parameters():
                 param.requires_grad = False
 
     # extract relu1_1, relu2_1, relu3_1, relu4_1 from input image
-    def encode_with_intermediate(self, input):
+    def encode_with_intermediate(self, input, depth):
         results = [input]
-        for i in range(3): # changed 4 -> 3
+        for i in range(depth):
             func = getattr(self, 'enc_{:d}'.format(i + 1))
             results.append(func(results[-1]))
         return results[1:]
 
     # extract relu4_1 from input image
-    def encode(self, input):
-        for i in range(4):
-            input = getattr(self, 'enc_{:d}'.format(i + 1))(input)
-        return input
+    # def encode(self, input):
+    #     for i in range(4):
+    #         input = getattr(self, 'enc_{:d}'.format(i + 1))(input)
+    #     return input
 
     def calc_content_loss(self, input, target):
-        assert (input.size() == target.size())
+        assert input.size() == target.size(), "{} != {}".format(input.size(), target.size())
         assert (target.requires_grad is False)
         return self.mse_loss(input, target)
 
@@ -148,7 +152,7 @@ class Net(nn.Module):
         return self.mse_loss(input_mean, target_mean) + \
                self.mse_loss(input_std, target_std)
 
-    def forward(self, content, style, alpha=1.0):
+    def forward(self, content, style, depth, alpha=1.0):
         assert 0 <= alpha <= 1
         # style_feats = self.encode_with_intermediate(style)
         # content_feat = self.encode(content)
@@ -157,26 +161,28 @@ class Net(nn.Module):
         ### new! ###
         t = content.clone()
         content_feat = content.clone()
-        style_feats = self.encode_with_intermediate(style.clone())
-        for i in range(3):
+        style_feats = self.encode_with_intermediate(style.clone(), depth)
+        for i in range(depth):
             t = getattr(self, 'enc_{:d}'.format(i + 1))(t)
             content_feat = getattr(self, 'enc_{:d}'.format(i + 1))(content_feat)
             t = adain(t, style_feats[i])
             t = alpha * t + (1 - alpha) * content_feat
         cbam = CBAM(t.size(1), r=2).to(device)
         cbam_t = cbam(t).detach()
-        ############
+        ## new end ##
+
         g_t = self.decoder(cbam_t)
-        g_t_feats = self.encode_with_intermediate(g_t)
+        g_t_feats = self.encode_with_intermediate(g_t, depth)
 
         # loss_c = self.calc_content_loss(g_t_feats[-1], t)
         # loss_s = self.calc_style_loss(g_t_feats[0], style_feats[0])
         # for i in range(1, 4):
         #     loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
+
         ### new! ###
         loss_c = self.calc_content_loss(g_t_feats[-1], cbam_t)
         loss_s = self.calc_style_loss(g_t_feats[0], style_feats[0])
-        for i in range(1, 3):
+        for i in range(1, depth):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
 
         # Auxiliary Branch 1 - Content Reconstruction
@@ -188,5 +194,6 @@ class Net(nn.Module):
         loss_style_rec = self.calc_content_loss(style_rec, style)
 
         loss_r = loss_content_rec + loss_style_rec
-        ############
+        ## new end ##
+
         return loss_c, loss_s, loss_r

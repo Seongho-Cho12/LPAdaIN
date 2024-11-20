@@ -77,6 +77,7 @@ if __name__ == '__main__':
     parser.add_argument('--rec_weight', type=float, default=100.0)
     parser.add_argument('--n_threads', type=int, default=16)
     parser.add_argument('--save_model_interval', type=int, default=10000)
+    parser.add_argument('--depth', type=int, default=3) # new! We can change the depth!
     args = parser.parse_args()
 
     device = torch.device('cuda')
@@ -90,8 +91,24 @@ if __name__ == '__main__':
     vgg = net.vgg
 
     vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
-    vgg = nn.Sequential(*list(vgg.children())[:18]) # 31 -> 18
-    network = net.Net(vgg, decoder)
+
+    match args.depth:
+        case 1:
+            vgg = nn.Sequential(*list(vgg.children())[:4])
+            decoder = nn.Sequential(*list(decoder.children())[27:])
+        case 2:
+            vgg = nn.Sequential(*list(vgg.children())[:11])
+            decoder = nn.Sequential(*list(decoder.children())[20:])
+        case 3:
+            vgg = nn.Sequential(*list(vgg.children())[:18])
+            decoder = nn.Sequential(*list(decoder.children())[13:])
+        case 4:
+            vgg = nn.Sequential(*list(vgg.children())[:31])
+        case _:
+            assert False, "depth should be in (1, 2, 3, 4)"
+    print("encoder: {}".format(vgg))
+    print("decoder: {}".format(decoder))
+    network = net.Net(vgg, decoder, args.depth)
     network.train()
     network.to(device)
 
@@ -116,7 +133,7 @@ if __name__ == '__main__':
         adjust_learning_rate(optimizer, iteration_count=i)
         content_images = next(content_iter).to(device)
         style_images = next(style_iter).to(device)
-        loss_c, loss_s, loss_r = network(content_images, style_images)
+        loss_c, loss_s, loss_r = network(content_images, style_images, args.depth)
         loss_c = args.content_weight * loss_c
         loss_s = args.style_weight * loss_s
         loss_r = args.rec_weight * loss_r
@@ -134,5 +151,5 @@ if __name__ == '__main__':
             for key in state_dict.keys():
                 state_dict[key] = state_dict[key].to(torch.device('cpu'))
             torch.save(state_dict, save_dir /
-                    'decoder_iter_{:d}.pth.tar'.format(i + 1))
+                    'layer{:d}_decoder_iter_{:d}.pth.tar'.format(args.depth, i + 1))
     writer.close()
