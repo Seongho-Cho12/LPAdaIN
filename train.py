@@ -57,6 +57,7 @@ def adjust_learning_rate(optimizer, iteration_count):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # Basic options
+    parser.add_argument('--model', type=str, choices=['lpadain', 'adain'], default='lpadain') # new! We can change the model!
     parser.add_argument('--content_dir', type=str, required=True,
                         help='Directory path to a batch of content images')
     parser.add_argument('--style_dir', type=str, required=True,
@@ -77,7 +78,10 @@ if __name__ == '__main__':
     parser.add_argument('--rec_weight', type=float, default=100.0)
     parser.add_argument('--n_threads', type=int, default=16)
     parser.add_argument('--save_model_interval', type=int, default=10000)
-    parser.add_argument('--depth', type=int, default=3) # new! We can change the depth!
+    parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3) # new! We can change the depth!
+    parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: False)")
+    parser.add_argument('--no-cbam', dest='cbam', action='store_false', help="Disable CBAM")
+    parser.set_defaults(cbam=True) # new! We can on/off cbam!
     args = parser.parse_args()
 
     device = torch.device('cuda')
@@ -104,10 +108,6 @@ if __name__ == '__main__':
             decoder = nn.Sequential(*list(decoder.children())[13:])
         case 4:
             vgg = nn.Sequential(*list(vgg.children())[:31])
-        case _:
-            assert False, "depth should be in (1, 2, 3, 4)"
-    print("encoder: {}".format(vgg))
-    print("decoder: {}".format(decoder))
     network = net.Net(vgg, decoder, args.depth)
     network.train()
     network.to(device)
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         adjust_learning_rate(optimizer, iteration_count=i)
         content_images = next(content_iter).to(device)
         style_images = next(style_iter).to(device)
-        loss_c, loss_s, loss_r = network(content_images, style_images, args.depth)
+        loss_c, loss_s, loss_r = network(content_images, style_images, args.depth, args.model, args.cbam)
         loss_c = args.content_weight * loss_c
         loss_s = args.style_weight * loss_s
         loss_r = args.rec_weight * loss_r
@@ -145,6 +145,7 @@ if __name__ == '__main__':
 
         writer.add_scalar('loss_content', loss_c.item(), i + 1)
         writer.add_scalar('loss_style', loss_s.item(), i + 1)
+        writer.add_scalar('loss_reconstruction', loss_r.item(), i + 1)
 
         if (i + 1) % args.save_model_interval == 0 or (i + 1) == args.max_iter:
             state_dict = net.decoder.state_dict()

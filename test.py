@@ -22,30 +22,48 @@ def test_transform(size, crop):
     return transform
 
 
-def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, depth, alpha=1.0,
-                   interpolation_weights=None):
+def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                   depth, model, use_cbam,
+                   alpha=1.0, interpolation_weights=None):
     assert (0.0 <= alpha <= 1.0)
     vggs = [vgg_1, vgg_2, vgg_3, vgg_4]
-    feat = content.clone()
     content_f = content
     style_f = style
-    for i in range(depth):
-        feat = vggs[i](feat)
-        content_f = vggs[i](content_f)
-        style_f = vggs[i](style_f)
+    if model == 'lpadain':
+        feat = content.clone()
+        for i in range(depth):
+            feat = vggs[i](feat)
+            content_f = vggs[i](content_f)
+            style_f = vggs[i](style_f)
+            if interpolation_weights:
+                _, C, H, W = feat.size()
+                new_feat = torch.FloatTensor(1, C, H, W).zero_().to(device)
+                base_feat = adaptive_instance_normalization(feat, style_f)
+                for i, w in enumerate(interpolation_weights):
+                    new_feat = new_feat + w * base_feat[i:i + 1]
+                feat = new_feat
+                content_f = content_f[0:1]
+            else:
+                feat = adaptive_instance_normalization(feat, style_f)
+            feat = feat * alpha + content_f * (1 - alpha)
+    else: # for adain
+        for i in range(depth):
+            content_f = vggs[i](content_f)
+            style_f = vggs[i](style_f)
         if interpolation_weights:
-            _, C, H, W = feat.size()
-            new_feat = torch.FloatTensor(1, C, H, W).zero_().to(device)
-            base_feat = adaptive_instance_normalization(feat, style_f)
+            _, C, H, W = content_f.size()
+            feat = torch.FloatTensor(1, C, H, W).zero_().to(device)
+            base_feat = adaptive_instance_normalization(content_f, style_f)
             for i, w in enumerate(interpolation_weights):
-                new_feat = new_feat + w * base_feat[i:i + 1]
-            feat = new_feat
+                feat = feat + w * base_feat[i:i + 1]
             content_f = content_f[0:1]
         else:
-            feat = adaptive_instance_normalization(feat, style_f)
-        feat = feat * alpha + content_f * (1 - alpha)
-    cbam = CBAM(feat.size(1), r=2).to(device)
-    feat = cbam(feat).detach()
+            feat = adaptive_instance_normalization(content_f, style_f)
+        feat = feat * alpha + content_f * (1 - alpha)      
+
+    if use_cbam:
+        cbam = CBAM(feat.size(1), r=2).to(device)
+        feat = cbam(feat).detach()
     return decoder(feat)
 
 
@@ -64,6 +82,7 @@ parser.add_argument('--style_dir', type=str,
 parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
 parser.add_argument('--decoder', type=str, default='models/decoder.pth')
 parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3) # new! We can change the depth!
+parser.add_argument('--model', type=str, choices=['lpadain', 'adain'], default='lpadain') # new! We can change the model!
 
 # Additional options
 parser.add_argument('--content_size', type=int, default=512,
@@ -88,6 +107,9 @@ parser.add_argument('--alpha', type=float, default=1.0,
 parser.add_argument(
     '--style_interpolation_weights', type=str, default='',
     help='The weight for blending the style of multiple style images')
+parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: False)")
+parser.add_argument('--no-cbam', dest='cbam', action='store_false', help="Disable CBAM")
+parser.set_defaults(cbam=True) # new! We can on/off cbam!
 
 args = parser.parse_args()
 
@@ -157,7 +179,8 @@ for content_path in content_paths:
         style = style.to(device)
         content = content.to(device)
         with torch.no_grad():
-            output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, args.depth,
+            output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                    args.depth, args.model, args.cbam,
                                     args.alpha, interpolation_weights)
         output = output.cpu()
         output_name = output_dir / '{:s}_interpolation{:s}'.format(
@@ -173,7 +196,8 @@ for content_path in content_paths:
             style = style.to(device).unsqueeze(0)
             content = content.to(device).unsqueeze(0)
             with torch.no_grad():
-                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, args.depth,
+                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model, args.cbam,
                                         args.alpha)
             output = output.cpu()
 
