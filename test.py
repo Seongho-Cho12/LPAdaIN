@@ -44,6 +44,8 @@ def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, depth, a
         else:
             feat = adaptive_instance_normalization(feat, style_f)
         feat = feat * alpha + content_f * (1 - alpha)
+    cbam = CBAM(feat.size(1), r=2).to(device)
+    feat = cbam(feat).detach()
     return decoder(feat)
 
 

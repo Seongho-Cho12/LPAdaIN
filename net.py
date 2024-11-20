@@ -168,10 +168,10 @@ class Net(nn.Module):
             t = adain(t, style_feats[i])
             t = alpha * t + (1 - alpha) * content_feat
         cbam = CBAM(t.size(1), r=2).to(device)
-        cbam_t = cbam(t).detach()
+        t = cbam(t).detach()
         ## new end ##
 
-        g_t = self.decoder(cbam_t)
+        g_t = self.decoder(t)
         g_t_feats = self.encode_with_intermediate(g_t, depth)
 
         # loss_c = self.calc_content_loss(g_t_feats[-1], t)
@@ -180,7 +180,7 @@ class Net(nn.Module):
         #     loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
 
         ### new! ###
-        loss_c = self.calc_content_loss(g_t_feats[-1], cbam_t)
+        loss_c = self.calc_content_loss(g_t_feats[-1], t)
         loss_s = self.calc_style_loss(g_t_feats[0], style_feats[0])
         for i in range(1, depth):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])

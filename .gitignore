@@ -6,4 +6,4 @@ experiments/*
 logs/*
 *.pth.tar
 *.jpg
-outputLP/*
+output_LP/*
