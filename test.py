@@ -22,14 +22,14 @@ def test_transform(size, crop):
     return transform
 
 
-def style_transfer(vgg_1, vgg_2, vgg_3, decoder, content, style, alpha=1.0,
+def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, depth, alpha=1.0,
                    interpolation_weights=None):
     assert (0.0 <= alpha <= 1.0)
-    vggs = [vgg_1, vgg_2, vgg_3]
+    vggs = [vgg_1, vgg_2, vgg_3, vgg_4]
     feat = content.clone()
     content_f = content
     style_f = style
-    for i in range(3):
+    for i in range(depth):
         feat = vggs[i](feat)
         content_f = vggs[i](content_f)
         style_f = vggs[i](style_f)
@@ -61,6 +61,7 @@ parser.add_argument('--style_dir', type=str,
                     help='Directory path to a batch of style images')
 parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
 parser.add_argument('--decoder', type=str, default='models/decoder.pth')
+parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3) # new! We can change the depth!
 
 # Additional options
 parser.add_argument('--content_size', type=int, default=512,
@@ -127,10 +128,10 @@ vgg.eval()
 
 decoder.load_state_dict(torch.load(args.decoder, weights_only=True))
 vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
-# vgg = nn.Sequential(*list(vgg.children())[:31]) Encoder is not trained.
 vgg_1 = nn.Sequential(*list(vgg.children())[:4])
 vgg_2 = nn.Sequential(*list(vgg.children())[4:11])
 vgg_3 = nn.Sequential(*list(vgg.children())[11:18])
+vgg_4 = nn.Sequential(*list(vgg.children())[18:31])
 
 vgg.to(device)
 decoder.to(device)
@@ -146,7 +147,7 @@ for content_path in content_paths:
         style = style.to(device)
         content = content.to(device)
         with torch.no_grad():
-            output = style_transfer(vgg_1, vgg_2, vgg_3, decoder, content, style,
+            output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, args.depth,
                                     args.alpha, interpolation_weights)
         output = output.cpu()
         output_name = output_dir / '{:s}_interpolation{:s}'.format(
@@ -162,7 +163,7 @@ for content_path in content_paths:
             style = style.to(device).unsqueeze(0)
             content = content.to(device).unsqueeze(0)
             with torch.no_grad():
-                output = style_transfer(vgg_1, vgg_2, vgg_3, decoder, content, style,
+                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style, args.depth,
                                         args.alpha)
             output = output.cpu()
 

@@ -32,7 +32,11 @@ You can also run the code on directories of content and style images using `--co
 ```
 python test.py --content_dir input/content --style_dir input/style
 ```
-
+You have to know the depth of trained decoder and put it using `--depth`. Default depth is 3.
+Depth can be 1, 2, 3, and 4.
+```
+python test.py --content <content> --style <style> --decoder <decoder_pth> --depth <depth_value>
+```
 This is an example of mixing four styles by specifying `--style` and `--style_interpolation_weights` option.
 ```
 python test.py --content input/content/avril.jpg --style input/style/picasso_self_portrait.jpg,input/style/impronte_d_artista.jpg,input/style/trial.jpg,input/style/antimonocromatismo.jpg --style_interpolation_weights 1,1,1,1 --content_size 512 --style_size 512 --crop
