@@ -108,7 +108,7 @@ if __name__ == '__main__':
             decoder = nn.Sequential(*list(decoder.children())[13:])
         case 4:
             vgg = nn.Sequential(*list(vgg.children())[:31])
-    network = net.Net(vgg, decoder, args.depth)
+    network = net.Net(vgg, decoder, args.depth, args.cbam)
     network.train()
     network.to(device)
 
@@ -127,7 +127,12 @@ if __name__ == '__main__':
         sampler=InfiniteSamplerWrapper(style_dataset),
         num_workers=args.n_threads))
 
-    optimizer = torch.optim.Adam(network.decoder.parameters(), lr=args.lr)
+    params = list(network.decoder.parameters())
+    if args.cbam:
+        params = list(network.cbam.parameters()) + params
+        optimizer = torch.optim.Adam(params, lr=args.lr)
+    else:
+        optimizer = torch.optim.Adam(params, lr=args.lr)
 
     for i in tqdm(range(args.max_iter)):
         adjust_learning_rate(optimizer, iteration_count=i)
@@ -148,9 +153,12 @@ if __name__ == '__main__':
         writer.add_scalar('loss_reconstruction', loss_r.item(), i + 1)
 
         if (i + 1) % args.save_model_interval == 0 or (i + 1) == args.max_iter:
-            state_dict = decoder.state_dict()
+            state_dict = {'decoder': network.decoder.state_dict()}
+            if args.cbam:
+                state_dict['cbam'] = network.cbam.state_dict()
             for key in state_dict.keys():
-                state_dict[key] = state_dict[key].to(torch.device('cpu'))
+                for param_key, param_value in state_dict[key].items():
+                    state_dict[key][param_key] = param_value.to(torch.device('cpu'))
             torch.save(state_dict, save_dir /
-                    'layer{:d}_decoder_iter_{:d}.pth.tar'.format(args.depth, i + 1))
+                    'layer{:d}_iter_{:d}.pth.tar'.format(args.depth, i + 1))
     writer.close()

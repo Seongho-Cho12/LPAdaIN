@@ -97,16 +97,31 @@ vgg = nn.Sequential(
 
 
 class Net(nn.Module):
-    def __init__(self, encoder, decoder, depth):
+    def __init__(self, encoder, decoder, depth, use_cbam):
         super(Net, self).__init__()
         enc_layers = list(encoder.children())
-        self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
-        if depth >= 2:
+        if depth == 1:
+            self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
+            if use_cbam:
+                self.cbam = CBAM(channels=64, r=2).to(device)
+        elif depth == 2:
+            self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
             self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
-        if depth >= 3:
+            if use_cbam:
+                self.cbam = CBAM(channels=128, r=2).to(device)
+        elif depth == 3:
+            self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
+            self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
             self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
-        if depth == 4:
+            if use_cbam:
+                self.cbam = CBAM(channels=256, r=2).to(device)
+        elif depth == 4:
+            self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
+            self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
+            self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
             self.enc_4 = nn.Sequential(*enc_layers[18:31])  # relu3_1 -> relu4_1
+            if use_cbam:
+                self.cbam = CBAM(channels=512, r=2).to(device)
         self.decoder = decoder
         self.mse_loss = nn.MSELoss()
 
@@ -164,14 +179,14 @@ class Net(nn.Module):
 
         # CBAM part
         if use_cbam:
-            cbam = CBAM(t.size(1), r=2).to(device)
-            t = cbam(t).detach()
+            t = self.cbam(t)
 
         # Decode & Encode again to make loss function
         g_t = self.decoder(t)
         g_t_feats = self.encode_with_intermediate(g_t, depth)
+        t_for_loss = t.clone().detach()
 
-        loss_c = self.calc_content_loss(g_t_feats[-1], t)
+        loss_c = self.calc_content_loss(g_t_feats[-1], t_for_loss)
         loss_s = self.calc_style_loss(g_t_feats[0], style_feats[0])
         for i in range(1, depth):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])

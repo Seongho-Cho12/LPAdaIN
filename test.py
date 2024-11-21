@@ -23,7 +23,7 @@ def test_transform(size, crop):
 
 
 def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                   depth, model, use_cbam,
+                   depth, model, use_cbam, cbam,
                    alpha=1.0, interpolation_weights=None):
     assert (0.0 <= alpha <= 1.0)
     vggs = [vgg_1, vgg_2, vgg_3, vgg_4]
@@ -62,8 +62,7 @@ def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
         feat = feat * alpha + content_f * (1 - alpha)      
 
     if use_cbam:
-        cbam = CBAM(feat.size(1), r=2).to(device)
-        feat = cbam(feat).detach()
+        feat = cbam(feat)
     return decoder(feat)
 
 
@@ -153,12 +152,20 @@ vgg.eval()
 match args.depth:
     case 1:
         decoder = nn.Sequential(*list(decoder.children())[27:])
+        cbam = CBAM(channels=64, r=2)
     case 2:
         decoder = nn.Sequential(*list(decoder.children())[20:])
+        cbam = CBAM(channels=128, r=2)
     case 3:
         decoder = nn.Sequential(*list(decoder.children())[13:])
+        cbam = CBAM(channels=256, r=2)
+    case 4:
+        cbam = CBAM(channels=512, r=2)
 
-decoder.load_state_dict(torch.load(args.decoder, weights_only=True))
+state = torch.load(args.decoder, map_location=device, weights_only=True)
+decoder.load_state_dict(state['decoder'])
+if 'cbam' in state:
+    cbam.load_state_dict(state['cbam'])
 vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
 vgg_1 = nn.Sequential(*list(vgg.children())[:4])
 vgg_2 = nn.Sequential(*list(vgg.children())[4:11])
@@ -167,6 +174,7 @@ vgg_4 = nn.Sequential(*list(vgg.children())[18:31])
 
 vgg.to(device)
 decoder.to(device)
+cbam.to(device)
 
 content_tf = test_transform(args.content_size, args.crop)
 style_tf = test_transform(args.style_size, args.crop)
@@ -180,7 +188,7 @@ for content_path in content_paths:
         content = content.to(device)
         with torch.no_grad():
             output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                    args.depth, args.model, args.cbam,
+                                    args.depth, args.model, args.cbam, cbam,
                                     args.alpha, interpolation_weights)
         output = output.cpu()
         output_name = output_dir / '{:s}_interpolation{:s}'.format(
@@ -197,7 +205,7 @@ for content_path in content_paths:
             content = content.to(device).unsqueeze(0)
             with torch.no_grad():
                 output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model, args.cbam,
+                                        args.depth, args.model, args.cbam, cbam,
                                         args.alpha)
             output = output.cpu()
 
