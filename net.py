@@ -97,30 +97,44 @@ vgg = nn.Sequential(
 
 
 class Net(nn.Module):
-    def __init__(self, encoder, decoder, depth, use_cbam):
+    def __init__(self, encoder, decoder, depth, use_cbam, use_mul_cbam):
         super(Net, self).__init__()
         enc_layers = list(encoder.children())
         if depth == 1:
             self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
-            if use_cbam:
+            if use_mul_cbam:
+                self.cbam_1 = CBAM(channels=64, r=2).to(device)
+            elif use_cbam:
                 self.cbam = CBAM(channels=64, r=2).to(device)
         elif depth == 2:
             self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
             self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
-            if use_cbam:
+            if use_mul_cbam:
+                self.cbam_1 = CBAM(channels=64, r=2).to(device)
+                self.cbam_2 = CBAM(channels=128, r=2).to(device)
+            elif use_cbam:
                 self.cbam = CBAM(channels=128, r=2).to(device)
         elif depth == 3:
             self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
             self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
             self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
-            if use_cbam:
+            if use_mul_cbam:
+                self.cbam_1 = CBAM(channels=64, r=2).to(device)
+                self.cbam_2 = CBAM(channels=128, r=2).to(device)
+                self.cbam_3 = CBAM(channels=256, r=2).to(device)
+            elif use_cbam:
                 self.cbam = CBAM(channels=256, r=2).to(device)
         elif depth == 4:
             self.enc_1 = nn.Sequential(*enc_layers[:4])  # input -> relu1_1
             self.enc_2 = nn.Sequential(*enc_layers[4:11])  # relu1_1 -> relu2_1
             self.enc_3 = nn.Sequential(*enc_layers[11:18])  # relu2_1 -> relu3_1
             self.enc_4 = nn.Sequential(*enc_layers[18:31])  # relu3_1 -> relu4_1
-            if use_cbam:
+            if use_mul_cbam:
+                self.cbam_1 = CBAM(channels=64, r=2).to(device)
+                self.cbam_2 = CBAM(channels=128, r=2).to(device)
+                self.cbam_3 = CBAM(channels=256, r=2).to(device)
+                self.cbam_4 = CBAM(channels=512, r=2).to(device)
+            elif use_cbam:
                 self.cbam = CBAM(channels=512, r=2).to(device)
         self.decoder = decoder
         self.mse_loss = nn.MSELoss()
@@ -158,7 +172,7 @@ class Net(nn.Module):
         return self.mse_loss(input_mean, target_mean) + \
                self.mse_loss(input_std, target_std)
 
-    def forward(self, content, style, depth, model, use_cbam, alpha=1.0):
+    def forward(self, content, style, depth, model, use_cbam, use_mul_cbam, alpha=1.0):
         assert 0 <= alpha <= 1
         # For LPAdaIN
         if model == 'lpadain':
@@ -170,6 +184,10 @@ class Net(nn.Module):
                 content_feat = getattr(self, 'enc_{:d}'.format(i + 1))(content_feat)
                 t = adain(t, style_feats[i])
                 t = alpha * t + (1 - alpha) * content_feat
+                # For multilayer CBAM
+                if use_mul_cbam:
+                    t = getattr(self, 'cbam_{:d}'.format(i + 1))(t)
+
         # For AdaIN
         else:
             style_feats = self.encode_with_intermediate(style, depth)
@@ -178,7 +196,7 @@ class Net(nn.Module):
             t = alpha * t + (1 - alpha) * content_feat
 
         # CBAM part
-        if use_cbam:
+        if not use_mul_cbam and use_cbam:
             t = self.cbam(t)
 
         # Decode & Encode again to make loss function

@@ -23,7 +23,7 @@ def test_transform(size, crop):
 
 
 def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                   depth, model, use_cbam, cbam,
+                   depth, model, cbam=None, cbam_list=None,
                    alpha=1.0, interpolation_weights=None):
     assert (0.0 <= alpha <= 1.0)
     vggs = [vgg_1, vgg_2, vgg_3, vgg_4]
@@ -46,6 +46,8 @@ def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
             else:
                 feat = adaptive_instance_normalization(feat, style_f)
             feat = feat * alpha + content_f * (1 - alpha)
+            if cbam_list is not None:
+                feat = cbam_list[i](feat)
     else: # for adain
         for i in range(depth):
             content_f = vggs[i](content_f)
@@ -59,9 +61,9 @@ def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
             content_f = content_f[0:1]
         else:
             feat = adaptive_instance_normalization(content_f, style_f)
-        feat = feat * alpha + content_f * (1 - alpha)      
+        feat = feat * alpha + content_f * (1 - alpha)
 
-    if use_cbam:
+    if cbam_list is None and cbam is not None:
         feat = cbam(feat)
     return decoder(feat)
 
@@ -109,6 +111,9 @@ parser.add_argument(
 parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: False)")
 parser.add_argument('--no-cbam', dest='cbam', action='store_false', help="Disable CBAM")
 parser.set_defaults(cbam=True) # new! We can on/off cbam!
+parser.add_argument('--mul_cbam', action='store_true', help="Enable multilayer CBAM (default: False)")
+parser.add_argument('--no-mul_cbam', dest='mul_cbam', action='store_false', help="Disable multilayer CBAM")
+parser.set_defaults(mul_cbam=False) # new! We can on/off multilayer cbam!
 
 args = parser.parse_args()
 
@@ -152,19 +157,44 @@ vgg.eval()
 match args.depth:
     case 1:
         decoder = nn.Sequential(*list(decoder.children())[27:])
-        cbam = CBAM(channels=64, r=2)
+        if args.mul_cbam:
+            cbam_1 = CBAM(channels=64, r=2).to(device)
+            cbam_list = [cbam_1]
+        elif args.cbam:
+            cbam = CBAM(channels=64, r=2).to(device)
     case 2:
         decoder = nn.Sequential(*list(decoder.children())[20:])
-        cbam = CBAM(channels=128, r=2)
+        if args.mul_cbam:
+            cbam_1 = CBAM(channels=64, r=2).to(device)
+            cbam_2 = CBAM(channels=128, r=2).to(device)
+            cbam_list = [cbam_1, cbam_2]
+        elif args.cbam:
+            cbam = CBAM(channels=128, r=2).to(device)
     case 3:
         decoder = nn.Sequential(*list(decoder.children())[13:])
-        cbam = CBAM(channels=256, r=2)
+        if args.mul_cbam:
+            cbam_1 = CBAM(channels=64, r=2).to(device)
+            cbam_2 = CBAM(channels=128, r=2).to(device)
+            cbam_3 = CBAM(channels=256, r=2).to(device)
+            cbam_list = [cbam_1, cbam_2, cbam_3]
+        elif args.cbam:
+            cbam = CBAM(channels=256, r=2).to(device)
     case 4:
-        cbam = CBAM(channels=512, r=2)
+        if args.mul_cbam:
+            cbam_1 = CBAM(channels=64, r=2).to(device)
+            cbam_2 = CBAM(channels=128, r=2).to(device)
+            cbam_3 = CBAM(channels=256, r=2).to(device)
+            cbam_4 = CBAM(channels=512, r=2).to(device)
+            cbam_list = [cbam_1, cbam_2, cbam_3, cbam_4]
+        elif args.cbam:
+            cbam = CBAM(channels=512, r=2).to(device)
 
 state = torch.load(args.decoder, map_location=device, weights_only=True)
 decoder.load_state_dict(state['decoder'])
-if 'cbam' in state:
+if args.mul_cbam:
+    for i in range(args.depth):
+        cbam_list[i].load_state_dict(state['cbam_{:d}'.format(i + 1)])
+elif args.cbam:
     cbam.load_state_dict(state['cbam'])
 vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
 vgg_1 = nn.Sequential(*list(vgg.children())[:4])
@@ -174,7 +204,6 @@ vgg_4 = nn.Sequential(*list(vgg.children())[18:31])
 
 vgg.to(device)
 decoder.to(device)
-cbam.to(device)
 
 content_tf = test_transform(args.content_size, args.crop)
 style_tf = test_transform(args.style_size, args.crop)
@@ -187,9 +216,18 @@ for content_path in content_paths:
         style = style.to(device)
         content = content.to(device)
         with torch.no_grad():
-            output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                    args.depth, args.model, args.cbam, cbam,
-                                    args.alpha, interpolation_weights)
+            if args.mul_cbam:
+                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model, cbam_list=cbam_list,
+                                        alpha=args.alpha, interpolation_weights=interpolation_weights)
+            elif args.cbam:
+                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model, cbam=cbam,
+                                        alpha=args.alpha, interpolation_weights=interpolation_weights)
+            else:
+                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model,
+                                        alpha=args.alpha, interpolation_weights=interpolation_weights)
         output = output.cpu()
         output_name = output_dir / '{:s}_interpolation{:s}'.format(
             content_path.stem, args.save_ext)
@@ -204,9 +242,18 @@ for content_path in content_paths:
             style = style.to(device).unsqueeze(0)
             content = content.to(device).unsqueeze(0)
             with torch.no_grad():
-                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model, args.cbam, cbam,
-                                        args.alpha)
+                if args.mul_cbam:
+                    output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model, cbam_list=cbam_list,
+                                        alpha=args.alpha)
+                elif args.cbam:
+                    output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model, cbam=cbam,
+                                        alpha=args.alpha)
+                else:
+                    output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                        args.depth, args.model,
+                                        alpha=args.alpha)
             output = output.cpu()
 
             output_name = output_dir / '{:s}_stylized_{:s}{:s}'.format(

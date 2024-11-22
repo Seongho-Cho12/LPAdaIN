@@ -75,15 +75,19 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--style_weight', type=float, default=10.0)
     parser.add_argument('--content_weight', type=float, default=1.0)
-    parser.add_argument('--rec_weight', type=float, default=100.0)
+    parser.add_argument('--rec_weight', type=float, default=100.0) # We can change reconstruction loss' weight
     parser.add_argument('--n_threads', type=int, default=16)
     parser.add_argument('--save_model_interval', type=int, default=10000)
     parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3) # new! We can change the depth!
     parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: False)")
     parser.add_argument('--no-cbam', dest='cbam', action='store_false', help="Disable CBAM")
     parser.set_defaults(cbam=True) # new! We can on/off cbam!
+    parser.add_argument('--mul_cbam', action='store_true', help="Enable multilayer CBAM (default: False)")
+    parser.add_argument('--no-mul_cbam', dest='mul_cbam', action='store_false', help="Disable multilayer CBAM")
+    parser.set_defaults(mul_cbam=False) # new! We can on/off multilayer cbam! (can't use with 'adain' model, only for 'lpadain')
     args = parser.parse_args()
 
+    assert(args.model != 'adain' or not args.mul_cbam)
     device = torch.device('cuda')
     save_dir = Path(args.save_dir)
     save_dir.mkdir(exist_ok=True, parents=True)
@@ -108,7 +112,8 @@ if __name__ == '__main__':
             decoder = nn.Sequential(*list(decoder.children())[13:])
         case 4:
             vgg = nn.Sequential(*list(vgg.children())[:31])
-    network = net.Net(vgg, decoder, args.depth, args.cbam)
+    network = net.Net(vgg, decoder, args.depth, args.cbam, args.mul_cbam)
+    print(vars(network))
     network.train()
     network.to(device)
 
@@ -128,17 +133,19 @@ if __name__ == '__main__':
         num_workers=args.n_threads))
 
     params = list(network.decoder.parameters())
-    if args.cbam:
+    if args.mul_cbam:
+        for i in range(args.depth):
+            params = list(getattr(network, 'cbam_{:d}'.format(i + 1)).parameters()) + params
+    elif args.cbam:
         params = list(network.cbam.parameters()) + params
-        optimizer = torch.optim.Adam(params, lr=args.lr)
-    else:
-        optimizer = torch.optim.Adam(params, lr=args.lr)
+
+    optimizer = torch.optim.Adam(params, lr=args.lr)
 
     for i in tqdm(range(args.max_iter)):
         adjust_learning_rate(optimizer, iteration_count=i)
         content_images = next(content_iter).to(device)
         style_images = next(style_iter).to(device)
-        loss_c, loss_s, loss_r = network(content_images, style_images, args.depth, args.model, args.cbam)
+        loss_c, loss_s, loss_r = network(content_images, style_images, args.depth, args.model, args.cbam, args.mul_cbam)
         loss_c = args.content_weight * loss_c
         loss_s = args.style_weight * loss_s
         loss_r = args.rec_weight * loss_r
@@ -154,7 +161,10 @@ if __name__ == '__main__':
 
         if (i + 1) % args.save_model_interval == 0 or (i + 1) == args.max_iter:
             state_dict = {'decoder': network.decoder.state_dict()}
-            if args.cbam:
+            if args.mul_cbam:
+                for j in range(args.depth):
+                    state_dict['cbam_{:d}'.format(j + 1)] = getattr(network, 'cbam_{:d}'.format(j + 1)).state_dict()
+            elif args.cbam:
                 state_dict['cbam'] = network.cbam.state_dict()
             for key in state_dict.keys():
                 for param_key, param_value in state_dict[key].items():
