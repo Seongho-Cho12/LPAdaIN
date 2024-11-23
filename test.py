@@ -67,6 +67,12 @@ def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
         feat = cbam(feat)
     return decoder(feat)
 
+def image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, depth):
+    vggs = [vgg_1, vgg_2, vgg_3, vgg_4]
+    content_f = content
+    for i in range(depth):
+        content_f = vggs[i](content_f)
+    return decoder(content_f)
 
 parser = argparse.ArgumentParser()
 # Basic options
@@ -114,6 +120,9 @@ parser.set_defaults(cbam=True) # new! We can on/off cbam!
 parser.add_argument('--mul_cbam', action='store_true', help="Enable multilayer CBAM (default: False)")
 parser.add_argument('--no-mul_cbam', dest='mul_cbam', action='store_false', help="Disable multilayer CBAM")
 parser.set_defaults(mul_cbam=False) # new! We can on/off multilayer cbam!
+parser.add_argument('--reconstruction', action='store_true', help="To make reconstruction (default: False)")
+parser.add_argument('--no-reconstruction', dest='reconstruction', action='store_false', help="Disable reconstruction")
+parser.set_defaults(reconstruction = False) # reconstruction mode (make content/style images enter encoder/decoder)
 
 args = parser.parse_args()
 
@@ -154,40 +163,39 @@ vgg = net.vgg
 decoder.eval()
 vgg.eval()
 
-match args.depth:
-    case 1:
-        decoder = nn.Sequential(*list(decoder.children())[27:])
-        if args.mul_cbam:
-            cbam_1 = CBAM(channels=64, r=2).to(device)
-            cbam_list = [cbam_1]
-        elif args.cbam:
-            cbam = CBAM(channels=64, r=2).to(device)
-    case 2:
-        decoder = nn.Sequential(*list(decoder.children())[20:])
-        if args.mul_cbam:
-            cbam_1 = CBAM(channels=64, r=2).to(device)
-            cbam_2 = CBAM(channels=128, r=2).to(device)
-            cbam_list = [cbam_1, cbam_2]
-        elif args.cbam:
-            cbam = CBAM(channels=128, r=2).to(device)
-    case 3:
-        decoder = nn.Sequential(*list(decoder.children())[13:])
-        if args.mul_cbam:
-            cbam_1 = CBAM(channels=64, r=2).to(device)
-            cbam_2 = CBAM(channels=128, r=2).to(device)
-            cbam_3 = CBAM(channels=256, r=2).to(device)
-            cbam_list = [cbam_1, cbam_2, cbam_3]
-        elif args.cbam:
-            cbam = CBAM(channels=256, r=2).to(device)
-    case 4:
-        if args.mul_cbam:
-            cbam_1 = CBAM(channels=64, r=2).to(device)
-            cbam_2 = CBAM(channels=128, r=2).to(device)
-            cbam_3 = CBAM(channels=256, r=2).to(device)
-            cbam_4 = CBAM(channels=512, r=2).to(device)
-            cbam_list = [cbam_1, cbam_2, cbam_3, cbam_4]
-        elif args.cbam:
-            cbam = CBAM(channels=512, r=2).to(device)
+if args.depth == 1:
+    decoder = nn.Sequential(*list(decoder.children())[27:])
+    if args.mul_cbam:
+        cbam_1 = CBAM(channels=64, r=2).to(device)
+        cbam_list = [cbam_1]
+    elif args.cbam:
+        cbam = CBAM(channels=64, r=2).to(device)
+elif args.depth == 2:
+    decoder = nn.Sequential(*list(decoder.children())[20:])
+    if args.mul_cbam:
+        cbam_1 = CBAM(channels=64, r=2).to(device)
+        cbam_2 = CBAM(channels=128, r=2).to(device)
+        cbam_list = [cbam_1, cbam_2]
+    elif args.cbam:
+        cbam = CBAM(channels=128, r=2).to(device)
+if args.depth == 3:
+    decoder = nn.Sequential(*list(decoder.children())[13:])
+    if args.mul_cbam:
+        cbam_1 = CBAM(channels=64, r=2).to(device)
+        cbam_2 = CBAM(channels=128, r=2).to(device)
+        cbam_3 = CBAM(channels=256, r=2).to(device)
+        cbam_list = [cbam_1, cbam_2, cbam_3]
+    elif args.cbam:
+        cbam = CBAM(channels=256, r=2).to(device)
+if args.depth == 4:
+    if args.mul_cbam:
+        cbam_1 = CBAM(channels=64, r=2).to(device)
+        cbam_2 = CBAM(channels=128, r=2).to(device)
+        cbam_3 = CBAM(channels=256, r=2).to(device)
+        cbam_4 = CBAM(channels=512, r=2).to(device)
+        cbam_list = [cbam_1, cbam_2, cbam_3, cbam_4]
+    elif args.cbam:
+        cbam = CBAM(channels=512, r=2).to(device)
 
 state = torch.load(args.decoder, map_location=device, weights_only=True)
 decoder.load_state_dict(state['decoder'])
@@ -208,54 +216,74 @@ decoder.to(device)
 content_tf = test_transform(args.content_size, args.crop)
 style_tf = test_transform(args.style_size, args.crop)
 
-for content_path in content_paths:
-    if do_interpolation:  # one content image, N style image
-        style = torch.stack([style_tf(Image.open(str(p))) for p in style_paths])
-        content = content_tf(Image.open(str(content_path))) \
-            .unsqueeze(0).expand_as(style)
-        style = style.to(device)
-        content = content.to(device)
-        with torch.no_grad():
-            if args.mul_cbam:
-                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model, cbam_list=cbam_list,
-                                        alpha=args.alpha, interpolation_weights=interpolation_weights)
-            elif args.cbam:
-                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model, cbam=cbam,
-                                        alpha=args.alpha, interpolation_weights=interpolation_weights)
-            else:
-                output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model,
-                                        alpha=args.alpha, interpolation_weights=interpolation_weights)
-        output = output.cpu()
-        output_name = output_dir / '{:s}_interpolation{:s}'.format(
-            content_path.stem, args.save_ext)
-        save_image(output, str(output_name))
-
-    else:  # process one content and one style
-        for style_path in style_paths:
-            content = content_tf(Image.open(str(content_path)))
-            style = style_tf(Image.open(str(style_path)))
-            if args.preserve_color:
-                style = coral(style, content)
-            style = style.to(device).unsqueeze(0)
-            content = content.to(device).unsqueeze(0)
+if args.reconstruction == False:    # normal style transfer
+    for content_path in content_paths:
+        if do_interpolation:  # one content image, N style image
+            style = torch.stack([style_tf(Image.open(str(p))) for p in style_paths])
+            content = content_tf(Image.open(str(content_path))) \
+                .unsqueeze(0).expand_as(style)
+            style = style.to(device)
+            content = content.to(device)
             with torch.no_grad():
                 if args.mul_cbam:
                     output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model, cbam_list=cbam_list,
-                                        alpha=args.alpha)
+                                            args.depth, args.model, cbam_list=cbam_list,
+                                            alpha=args.alpha, interpolation_weights=interpolation_weights)
                 elif args.cbam:
                     output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model, cbam=cbam,
-                                        alpha=args.alpha)
+                                            args.depth, args.model, cbam=cbam,
+                                            alpha=args.alpha, interpolation_weights=interpolation_weights)
                 else:
                     output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
-                                        args.depth, args.model,
-                                        alpha=args.alpha)
+                                            args.depth, args.model,
+                                            alpha=args.alpha, interpolation_weights=interpolation_weights)
             output = output.cpu()
-
-            output_name = output_dir / '{:s}_stylized_{:s}{:s}'.format(
-                content_path.stem, style_path.stem, args.save_ext)
+            output_name = output_dir / '{:s}_interpolation{:s}'.format(
+                content_path.stem, args.save_ext)
             save_image(output, str(output_name))
+
+        else:  # process one content and one style
+            for style_path in style_paths:
+                content = content_tf(Image.open(str(content_path)))
+                style = style_tf(Image.open(str(style_path)))
+                if args.preserve_color:
+                    style = coral(style, content)
+                style = style.to(device).unsqueeze(0)
+                content = content.to(device).unsqueeze(0)
+                with torch.no_grad():
+                    if args.mul_cbam:
+                        output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                            args.depth, args.model, cbam_list=cbam_list,
+                                            alpha=args.alpha)
+                    elif args.cbam:
+                        output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                            args.depth, args.model, cbam=cbam,
+                                            alpha=args.alpha)
+                    else:
+                        output = style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
+                                            args.depth, args.model,
+                                            alpha=args.alpha)
+                output = output.cpu()
+
+                output_name = output_dir / '{:s}_stylized_{:s}{:s}'.format(
+                    content_path.stem, style_path.stem, args.save_ext)
+                save_image(output, str(output_name))
+else:       # reconstruction
+    for content_path in content_paths:
+        content = content_tf(Image.open(str(content_path))).unsqueeze(0).to(device)
+        content = content.to(device)
+        with torch.no_grad():
+            output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, args.depth)
+        output = output.cpu()
+        output_name = output_dir / '{:s}_reconstruction{:s}'.format(
+                    content_path.stem, args.save_ext)
+        save_image(output, str(output_name))
+    for style_path in style_paths:
+        style = style_tf(Image.open(str(style_path))).unsqueeze(0).to(device)
+        style = style.to(device)
+        with torch.no_grad():
+            output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, style, args.depth)
+        output = output.cpu()
+        output_name = output_dir / '{:s}_reconstruction{:s}'.format(
+                    style_path.stem, args.save_ext)
+        save_image(output, str(output_name))
