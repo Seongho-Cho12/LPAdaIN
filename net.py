@@ -191,7 +191,7 @@ class Net(nn.Module):
         # For AdaIN
         else:
             style_feats = self.encode_with_intermediate(style, depth)
-            content_feat = self.encode(content, depth)
+            content_feat = self.encode(content.clone(), depth)
             t = adain(content_feat, style_feats[-1])
             t = alpha * t + (1 - alpha) * content_feat
 
