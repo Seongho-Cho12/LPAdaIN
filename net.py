@@ -209,12 +209,18 @@ class Net(nn.Module):
         for i in range(1, depth):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
 
+
+        # npcandy: new - reconstruction with cbam
+        if not use_mul_cbam and use_cbam:
+            content_feat = self.cbam(content_feat)
+            style_feat = self.cbam(style_feats[-1])
+        
         # Auxiliary Branch 1 - Content Reconstruction
         content_rec = self.decoder(content_feat)
         loss_content_rec = self.calc_content_loss(content_rec, content)
 
         # Auxiliary Branch 2 - Style Reconstruction
-        style_rec = self.decoder(style_feats[-1])
+        style_rec = self.decoder(style_feat)
         loss_style_rec = self.calc_content_loss(style_rec, style)
 
         loss_r = loss_content_rec + loss_style_rec
