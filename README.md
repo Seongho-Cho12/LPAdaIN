@@ -3,6 +3,7 @@
 This is an unofficial pytorch implementation of a paper, LPAdaIN: Light Progressive Attention Adaptive Instance Normalization Model for Style Transfer [Zhu Q+, Electronics 2022](https://www.mdpi.com/2079-9292/11/18/2929).
 I'm really grateful to the [AdaIN code](https://github.com/naoto0804/pytorch-AdaIN), which is the base code of this repository.
 
+![Results](results2.png)
 ![Results](results.png)
 
 ## Requirements
