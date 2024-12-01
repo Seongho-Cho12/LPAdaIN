@@ -57,7 +57,8 @@ def adjust_learning_rate(optimizer, iteration_count):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # Basic options
-    parser.add_argument('--model', type=str, choices=['lpadain', 'adain'], default='lpadain') # new! We can change the model!
+    parser.add_argument('--model', type=str, choices=['lpadain', 'adain'], default='lpadain',
+                        help='Select base model: LPAdaIN or AdaIN') # new! We can change the model!
     parser.add_argument('--content_dir', type=str, required=True,
                         help='Directory path to a batch of content images')
     parser.add_argument('--style_dir', type=str, required=True,
@@ -75,11 +76,12 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--style_weight', type=float, default=10.0)
     parser.add_argument('--content_weight', type=float, default=1.0)
-    parser.add_argument('--rec_weight', type=float, default=100.0) # We can change reconstruction loss' weight
+    parser.add_argument('--rec_weight', type=float, default=100.0, help='Reconstruction weight') # We can change reconstruction loss' weight
     parser.add_argument('--n_threads', type=int, default=16)
     parser.add_argument('--save_model_interval', type=int, default=10000)
-    parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3) # new! We can change the depth!
-    parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: False)")
+    parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3,
+                        help='Depth for training model') # new! We can change the depth!
+    parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: True)")
     parser.add_argument('--no-cbam', dest='cbam', action='store_false', help="Disable CBAM")
     parser.set_defaults(cbam=True) # new! We can on/off cbam!
     parser.add_argument('--mul_cbam', action='store_true', help="Enable multilayer CBAM (default: False)")

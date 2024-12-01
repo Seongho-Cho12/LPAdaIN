@@ -86,10 +86,12 @@ parser.add_argument('--style', type=str,
                     interpolation or spatial control')
 parser.add_argument('--style_dir', type=str,
                     help='Directory path to a batch of style images')
-parser.add_argument('--vgg', type=str, default='models/vgg_normalised.pth')
-parser.add_argument('--decoder', type=str, default='models/decoder.pth')
-parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3) # new! We can change the depth!
-parser.add_argument('--model', type=str, choices=['lpadain', 'adain'], default='lpadain') # new! We can change the model!
+parser.add_argument('--vgg', type=str, default='models/encoder/vgg_normalised.pth')
+parser.add_argument('--decoder', type=str, default='models/original_LPAdaIN/layer3_iter_40000.pth.tar')
+parser.add_argument('--depth', type=int, choices=[1, 2, 3, 4], default=3, 
+                    help='Depth of trained decoder model') # new! We can change the depth!
+parser.add_argument('--model', type=str, choices=['lpadain', 'adain'], default='lpadain',
+                    help='Model used to train decoder. adain or lpadain') # new! We can change the model!
 
 # Additional options
 parser.add_argument('--content_size', type=int, default=512,
@@ -114,7 +116,7 @@ parser.add_argument('--alpha', type=float, default=1.0,
 parser.add_argument(
     '--style_interpolation_weights', type=str, default='',
     help='The weight for blending the style of multiple style images')
-parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: False)")
+parser.add_argument('--cbam', action='store_true', help="Enable CBAM (default: True)")
 parser.add_argument('--no-cbam', dest='cbam', action='store_false', help="Disable CBAM")
 parser.set_defaults(cbam=True) # new! We can on/off cbam!
 parser.add_argument('--mul_cbam', action='store_true', help="Enable multilayer CBAM (default: False)")
