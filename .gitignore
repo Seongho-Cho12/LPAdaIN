@@ -7,3 +7,5 @@ logs/*
 *.pth.tar
 *.jpg
 output_LP/*
+*.pyc
+__pycache__/
