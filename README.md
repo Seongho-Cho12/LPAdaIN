@@ -53,7 +53,7 @@ Some other options:
 * `--style_size`: New (minimum) size for the content image. Keeping the original size if set to 0.
 * `--alpha`: Adjust the degree of stylization. It should be a value between 0.0 and 1.0 (default).
 * `--preserve_color`: Preserve the color of the content image.
-**These 4 options are much more important!**:
+These 4 options are much more important!:
 * `--model`: Can choose either `adain` or `lpadain`. Default is `lpadain`.
 * `--cbam`: Can choose either trained data is trained with cbam or not. Use `--no-cbam` for model trained without cbam.
 * `--mul_cbam`: Can choose either trained data is trained with multiple cbam or not. Use `--no-mul_cbam` for model trained without multiple cbam.
@@ -75,5 +75,5 @@ For more details and parameters, please refer to --help option.
 
 ## References
 - [1]: X. Huang and S. Belongie. "Arbitrary Style Transfer in Real-time with Adaptive Instance Normalization.", in ICCV, 2017.
-- [2]: [Original implementation for AdaIN]([https://github.com/xunhuang1995/AdaIN-style](https://github.com/naoto0804/pytorch-AdaIN))
+- [2]: [Original implementation for AdaIN](https://github.com/naoto0804/pytorch-AdaIN)
 - [3]:  Zhu, Q.; Bai, H.; Sun, J.; Cheng, C.; Li, X. LPAdaIN: Light Progressive Attention Adaptive Instance Normalization Model for Style Transfer. Electronics 2022, 11, 2929.
