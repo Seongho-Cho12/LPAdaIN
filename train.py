@@ -102,18 +102,17 @@ if __name__ == '__main__':
 
     vgg.load_state_dict(torch.load(args.vgg, weights_only=True))
 
-    match args.depth:
-        case 1:
-            vgg = nn.Sequential(*list(vgg.children())[:4])
-            decoder = nn.Sequential(*list(decoder.children())[27:])
-        case 2:
-            vgg = nn.Sequential(*list(vgg.children())[:11])
-            decoder = nn.Sequential(*list(decoder.children())[20:])
-        case 3:
-            vgg = nn.Sequential(*list(vgg.children())[:18])
-            decoder = nn.Sequential(*list(decoder.children())[13:])
-        case 4:
-            vgg = nn.Sequential(*list(vgg.children())[:31])
+    if args.depth == 1:
+        vgg = nn.Sequential(*list(vgg.children())[:4])
+        decoder = nn.Sequential(*list(decoder.children())[27:])
+    elif args.depth == 2:
+        vgg = nn.Sequential(*list(vgg.children())[:11])
+        decoder = nn.Sequential(*list(decoder.children())[20:])
+    elif args.depth == 3:
+        vgg = nn.Sequential(*list(vgg.children())[:18])
+        decoder = nn.Sequential(*list(decoder.children())[13:])
+    elif args.depth == 4:
+        vgg = nn.Sequential(*list(vgg.children())[:31])
     network = net.Net(vgg, decoder, args.depth, args.cbam, args.mul_cbam)
     print(vars(network))
     network.train()

@@ -67,11 +67,14 @@ def style_transfer(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, style,
         feat = cbam(feat)
     return decoder(feat)
 
-def image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, depth):
+def image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, depth, cbam=None, cbam_list=None):
     vggs = [vgg_1, vgg_2, vgg_3, vgg_4]
     content_f = content
     for i in range(depth):
         content_f = vggs[i](content_f)
+
+    if cbam_list is None and cbam is not None:
+        content_f = cbam(content_f)
     return decoder(content_f)
 
 parser = argparse.ArgumentParser()
@@ -275,7 +278,12 @@ else:       # reconstruction
         content = content_tf(Image.open(str(content_path))).unsqueeze(0).to(device)
         content = content.to(device)
         with torch.no_grad():
-            output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, args.depth)
+            if args.mul_cbam:
+                output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, args.depth, cbam_list=cbam_list)
+            elif args.cbam:
+                output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, args.depth, cbam=cbam)
+            else:
+                output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, content, args.depth)
         output = output.cpu()
         output_name = output_dir / '{:s}_reconstruction{:s}'.format(
                     content_path.stem, args.save_ext)
@@ -284,7 +292,12 @@ else:       # reconstruction
         style = style_tf(Image.open(str(style_path))).unsqueeze(0).to(device)
         style = style.to(device)
         with torch.no_grad():
-            output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, style, args.depth)
+            if args.mul_cbam:
+                output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, style, args.depth, cbam_list=cbam_list)
+            elif args.cbam:
+                output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, style, args.depth, cbam=cbam)
+            else:
+                output = image_reconstruction(vgg_1, vgg_2, vgg_3, vgg_4, decoder, style, args.depth)
         output = output.cpu()
         output_name = output_dir / '{:s}_reconstruction{:s}'.format(
                     style_path.stem, args.save_ext)
