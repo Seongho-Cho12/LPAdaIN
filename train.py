@@ -87,6 +87,9 @@ if __name__ == '__main__':
     parser.add_argument('--mul_cbam', action='store_true', help="Enable multilayer CBAM (default: False)")
     parser.add_argument('--no-mul_cbam', dest='mul_cbam', action='store_false', help="Disable multilayer CBAM")
     parser.set_defaults(mul_cbam=False) # new! We can on/off multilayer cbam! (can't use with 'adain' model, only for 'lpadain')
+    parser.add_argument('--rec_cbam', action='store_true', help="Put CBAM Layer in auxiliary branch (default: False)")
+    parser.add_argument('--no-rec_cbam', dest='rec_cbam', action='store_false', help="Delete CBAM Layer in auxiliary branch")
+    parser.set_defaults(rec_cbam=False) # We can on/off cbam layer in auxiliary branch
     args = parser.parse_args()
 
     assert(args.model != 'adain' or not args.mul_cbam)
@@ -113,7 +116,7 @@ if __name__ == '__main__':
         decoder = nn.Sequential(*list(decoder.children())[13:])
     elif args.depth == 4:
         vgg = nn.Sequential(*list(vgg.children())[:31])
-    network = net.Net(vgg, decoder, args.depth, args.cbam, args.mul_cbam)
+    network = net.Net(vgg, decoder, args.depth, args.cbam, args.mul_cbam, args.rec_cbam)
     print(vars(network))
     network.train()
     network.to(device)

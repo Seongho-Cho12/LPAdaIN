@@ -97,7 +97,9 @@ vgg = nn.Sequential(
 
 
 class Net(nn.Module):
-    def __init__(self, encoder, decoder, depth, use_cbam, use_mul_cbam):
+    def __init__(self, encoder, decoder, depth, use_cbam, use_mul_cbam, rec_cbam):
+        self.rec_cbam = rec_cbam    # remember how to reconstruct, is there any beautiful way to implement?
+
         super(Net, self).__init__()
         enc_layers = list(encoder.children())
         if depth == 1:
@@ -210,8 +212,8 @@ class Net(nn.Module):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
 
 
-        # npcandy: new - reconstruction with cbam
-        if not use_mul_cbam and use_cbam:
+        # new - reconstruction with cbam
+        if not use_mul_cbam and use_cbam and self.rec_cbam:
             content_feat = self.cbam(content_feat)
             style_feat = self.cbam(style_feats[-1])
         
